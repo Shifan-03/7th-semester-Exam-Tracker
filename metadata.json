@@ -1,0 +1,6 @@
+{
+  "name": "Samurai Exam Tracker",
+  "description": "An atmospheric samurai study sanctuary tracking six exams with particle animations, live hour countdowns, chapter progress, and an interactive hero view with bottom scroll list.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

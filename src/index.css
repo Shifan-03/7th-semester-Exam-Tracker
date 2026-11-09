@@ -1,0 +1,68 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-display: 'Cinzel', serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbar for horizontal carousel and chapter list */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes windBillow {
+  0%, 100% {
+    transform: scale(1) translateY(0) rotate(0deg) skewX(0deg);
+  }
+  25% {
+    transform: scale(1.014) translateY(-5px) rotate(0.5deg) skewX(0.3deg);
+  }
+  50% {
+    transform: scale(1.02) translateY(-9px) rotate(-0.3deg) skewX(-0.4deg);
+  }
+  75% {
+    transform: scale(1.012) translateY(-4px) rotate(0.4deg) skewX(0.2deg);
+  }
+}
+
+.animate-wind-billow {
+  animation: windBillow 5s ease-in-out infinite;
+}
+
+.animate-samurai-wind {
+  animation: samuraiWind 6.5s ease-in-out infinite;
+}
+
+.animate-samurai-breathe {
+  animation: samuraiBreathe 8s ease-in-out infinite;
+}
