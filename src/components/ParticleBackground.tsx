@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ParticleConfig } from '../types';
+import samuraiImg from '../assets/images/samurai_realistic_fire_transparent.png';
 
-// The realistic samurai with wind-blown hair, billowing haori cape, and flaming fire katana
-const SAMURAI_REALISTIC_FIRE_PATH = '/assets/aistudio/samurai_realistic_fire_transparent.png';
+// Fallback path supporting GitHub Pages subpaths via BASE_URL
+const SAMURAI_FALLBACK_PATH = `${import.meta.env.BASE_URL}assets/aistudio/samurai_realistic_fire_transparent.png`;
+const SAMURAI_IMAGE_SRC = samuraiImg || SAMURAI_FALLBACK_PATH;
 
 interface ParticleBackgroundProps {
   config: ParticleConfig;
@@ -288,7 +290,7 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ config }
             <div className="absolute top-[38%] right-[24%] w-48 h-48 rounded-full bg-orange-500/25 blur-2xl pointer-events-none animate-pulse" />
 
             <img
-              src={SAMURAI_REALISTIC_FIRE_PATH}
+              src={SAMURAI_IMAGE_SRC}
               alt="Realistic fierce samurai warrior with flaming fire katana and wind-blown hair and cape"
               referrerPolicy="no-referrer"
               onError={() => setImageError(true)}
