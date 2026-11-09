@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/7th-semester-Exam-Tracker/', // <--- ঠিক এই জায়গাটায় 'base' দিতে হবে
+    base: '/7th-semester-Exam-Tracker/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
