@@ -11,14 +11,14 @@ import { Exam, ParticleConfig, ThemeType } from './types';
 import { getInitialExams } from './data/defaultExams';
 import { calculateCountdown, calculateProgress } from './utils/examCalculations';
 import { Eye, EyeOff, Sparkles } from 'lucide-react';
-import { supabase } from './supabaseClient'; // Supabase কানেকশন ইম্পোর্ট করা হলো
+import { supabase } from './supabaseClient';
 
 const ACTIVE_INDEX_KEY = 'examTracker.activeIndex';
 
 export default function App() {
   const [exams, setExams] = useState<Exam[]>(getInitialExams());
 
-  // Supabase থেকে ডাটা ফেচ করা (যাতে যে কেউ লগইন করলেই সবার এডিট করা ডেটা দেখতে পায়)
+  // Supabase থেকে ডাটা ফেচ করা
   const fetchFromSupabase = useCallback(async () => {
     try {
       const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
@@ -31,9 +31,9 @@ export default function App() {
 
       if (dbExams && dbExams.length > 0) {
         const loadedExams = Array.from({ length: 6 }, (_, i) => {
-          const found = dbExams.find((e: any) => e.id === i);
+          const found = dbExams.find((e: any) => Number(e.id) === i);
           const chs = dbChapters 
-            ? dbChapters.filter((c: any) => c.exam_id === i).map((c: any) => ({
+            ? dbChapters.filter((c: any) => Number(c.exam_id) === i).map((c: any) => ({
                 id: String(c.id),
                 title: c.title || '',
                 completed: Boolean(c.completed),
@@ -60,12 +60,12 @@ export default function App() {
     }
   }, []);
 
-  // পেজ লোড হওয়ার সময় Supabase থেকে ডাটা নিয়ে আসা
+  // পেজ লোড হওয়ার সময় Supabase থেকে ডাটা ফেচ করা
   useEffect(() => {
     fetchFromSupabase();
   }, [fetchFromSupabase]);
 
-  // Persist and restore active index
+  // Active Index Persist
   const [activeIndex, setActiveIndex] = useState<number>(() => {
     try {
       const savedIdx = localStorage.getItem(ACTIVE_INDEX_KEY);
@@ -82,7 +82,7 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // Supabase-এ ডাটা সিঙ্ক ও সেভ করার ফাংশন
+  // Supabase-এ ডাটা সেভ ও সিঙ্ক করার সেফ লজিক (BigInt Safe integer ID)
   const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
       for (const exam of updatedExams) {
@@ -97,17 +97,27 @@ export default function App() {
           notes: exam.notes,
         });
 
-        // 2. Refresh chapters for this exam
+        // 2. Delete and insert fresh chapters with valid BigInt IDs
         await supabase.from('chapters').delete().eq('exam_id', exam.id);
+        
         if (exam.chapters && exam.chapters.length > 0) {
-          const chapterRows = exam.chapters.map((c) => ({
-            id: isNaN(Number(c.id)) ? Date.now() + Math.random() : Number(c.id),
-            exam_id: exam.id,
-            title: c.title,
-            completed: c.completed,
-            revised: c.revised,
-            revision_count: c.revisionCount,
-          }));
+          const chapterRows = exam.chapters.map((c, index) => {
+            // দশমিক মুক্ত পূর্ণসংখ্যা আইডি জেনারেট করা হচ্ছে
+            const parsedId = parseInt(c.id, 10);
+            const safeId = !isNaN(parsedId) 
+              ? parsedId 
+              : Math.floor(Date.now() + index + Math.random() * 1000);
+
+            return {
+              id: safeId,
+              exam_id: exam.id,
+              title: c.title,
+              completed: c.completed,
+              revised: c.revised,
+              revision_count: c.revisionCount,
+            };
+          });
+          
           await supabase.from('chapters').upsert(chapterRows);
         }
       }
@@ -117,7 +127,7 @@ export default function App() {
     }
   }, []);
 
-  // Update active exam with Supabase persistence
+  // Exam Update Handler
   const handleUpdateExam = useCallback((updated: Exam) => {
     setExams((prev) => {
       const next = prev.map((e) => (e.id === updated.id ? updated : e));
@@ -126,7 +136,7 @@ export default function App() {
     });
   }, [persistToSupabase]);
 
-  // Update active exam index with persistence
+  // Exam Select Handler
   const handleSelectExam = useCallback((idx: number) => {
     setActiveIndex(idx);
     try {
@@ -136,7 +146,7 @@ export default function App() {
     }
   }, []);
 
-  // Live timer tick for countdown seconds
+  // Live Timer
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -178,7 +188,7 @@ export default function App() {
     }, 2500);
   }, []);
 
-  // Keyboard navigation for Prev/Next exam
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
