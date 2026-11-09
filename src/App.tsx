@@ -11,64 +11,61 @@ import { Exam, ParticleConfig, ThemeType } from './types';
 import { getInitialExams } from './data/defaultExams';
 import { calculateCountdown, calculateProgress } from './utils/examCalculations';
 import { Eye, EyeOff, Sparkles } from 'lucide-react';
+import { supabase } from './supabaseClient'; // Supabase কানেকশন ইম্পোর্ট করা হলো
 
-const STORAGE_KEY = 'examTracker.v2';
-const BACKUP_KEY = 'examTracker.backup';
 const ACTIVE_INDEX_KEY = 'examTracker.activeIndex';
-const LEGACY_KEY = 'examTracker.v1';
 
 export default function App() {
-  // Helper to load persisted exams with fallback recovery
-  const loadSavedExams = (): Exam[] => {
+  const [exams, setExams] = useState<Exam[]>(getInitialExams());
+
+  // Supabase থেকে ডাটা ফেচ করা (যাতে যে কেউ লগইন করলেই সবার এডিট করা ডেটা দেখতে পায়)
+  const fetchFromSupabase = useCallback(async () => {
     try {
-      // 1. Primary storage check
-      const primary = localStorage.getItem(STORAGE_KEY);
-      if (primary) {
-        const parsed = JSON.parse(primary);
-        if (Array.isArray(parsed) && parsed.length === 6) return parsed;
-        if (parsed && Array.isArray(parsed.exams) && parsed.exams.length === 6) return parsed.exams;
+      const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
+      const { data: dbChapters, error: errChapters } = await supabase.from('chapters').select('*');
+
+      if (errExams || errChapters) {
+        console.error('Error fetching from Supabase:', errExams || errChapters);
+        return;
       }
 
-      // 2. Backup storage check
-      const backup = localStorage.getItem(BACKUP_KEY);
-      if (backup) {
-        const parsed = JSON.parse(backup);
-        if (Array.isArray(parsed) && parsed.length === 6) return parsed;
-        if (parsed && Array.isArray(parsed.exams) && parsed.exams.length === 6) return parsed.exams;
-      }
-
-      // 3. Legacy storage check
-      const legacy = localStorage.getItem(LEGACY_KEY);
-      if (legacy) {
-        const parsedLegacy = JSON.parse(legacy);
-        if (parsedLegacy && parsedLegacy.exams && parsedLegacy.exams.length === 6) {
-          return parsedLegacy.exams.map((e: any, idx: number) => ({
-            id: idx,
-            name: e.name || '',
-            subjectCode: '',
-            date: e.date || '',
-            targetScore: 90,
-            color: '#38BDF8',
-            notes: '',
-            chapters: (e.ch || []).map((c: any, cIdx: number) => ({
-              id: String(c.id || cIdx),
-              title: c.t || `Chapter ${cIdx + 1}`,
-              completed: Boolean(c.c),
-              revised: Boolean(c.r),
-              revisionCount: Number(c.n || 0),
-            })),
-          }));
-        }
+      if (dbExams && dbExams.length > 0) {
+        const loadedExams = Array.from({ length: 6 }, (_, i) => {
+          const found = dbExams.find((e: any) => e.id === i);
+          const chs = dbChapters 
+            ? dbChapters.filter((c: any) => c.exam_id === i).map((c: any) => ({
+                id: String(c.id),
+                title: c.title || '',
+                completed: Boolean(c.completed),
+                revised: Boolean(c.revised),
+                revisionCount: Number(c.revision_count || 0),
+              }))
+            : [];
+          
+          return {
+            id: i,
+            name: found ? found.name || '' : '',
+            subjectCode: found?.subject_code || '',
+            date: found && found.date ? found.date.substring(0, 16) : '',
+            targetScore: found?.target_score || 90,
+            color: found?.color || '#38BDF8',
+            notes: found?.notes || '',
+            chapters: chs,
+          };
+        });
+        setExams(loadedExams);
       }
     } catch (e) {
-      console.warn('Error reading stored exams', e);
+      console.error('Failed to load from Supabase', e);
     }
-    return getInitialExams();
-  };
+  }, []);
 
-  const [exams, setExams] = useState<Exam[]>(loadSavedExams);
+  // পেজ লোড হওয়ার সময় Supabase থেকে ডাটা নিয়ে আসা
+  useEffect(() => {
+    fetchFromSupabase();
+  }, [fetchFromSupabase]);
 
-  // Persist and restore active index so user returns to the exact exam after refresh
+  // Persist and restore active index
   const [activeIndex, setActiveIndex] = useState<number>(() => {
     try {
       const savedIdx = localStorage.getItem(ACTIVE_INDEX_KEY);
@@ -85,26 +82,49 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // Direct synchronous save helper to guarantee zero data loss on instant refresh/unload
-  const persistImmediately = useCallback((newExams: Exam[]) => {
+  // Supabase-এ ডাটা সিঙ্ক ও সেভ করার ফাংশন
+  const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
-      const serialized = JSON.stringify(newExams);
-      localStorage.setItem(STORAGE_KEY, serialized);
-      localStorage.setItem(BACKUP_KEY, serialized);
+      for (const exam of updatedExams) {
+        // 1. Upsert Exam
+        await supabase.from('exams').upsert({
+          id: exam.id,
+          name: exam.name,
+          subject_code: exam.subjectCode,
+          date: exam.date ? new Date(exam.date).toISOString() : null,
+          target_score: exam.targetScore,
+          color: exam.color,
+          notes: exam.notes,
+        });
+
+        // 2. Refresh chapters for this exam
+        await supabase.from('chapters').delete().eq('exam_id', exam.id);
+        if (exam.chapters && exam.chapters.length > 0) {
+          const chapterRows = exam.chapters.map((c) => ({
+            id: isNaN(Number(c.id)) ? Date.now() + Math.random() : Number(c.id),
+            exam_id: exam.id,
+            title: c.title,
+            completed: c.completed,
+            revised: c.revised,
+            revision_count: c.revisionCount,
+          }));
+          await supabase.from('chapters').upsert(chapterRows);
+        }
+      }
       setLastSaved(new Date());
     } catch (e) {
-      console.error('Failed to write to localStorage', e);
+      console.error('Failed to sync with Supabase', e);
     }
   }, []);
 
-  // Update active exam with instant persistence
+  // Update active exam with Supabase persistence
   const handleUpdateExam = useCallback((updated: Exam) => {
     setExams((prev) => {
       const next = prev.map((e) => (e.id === updated.id ? updated : e));
-      persistImmediately(next);
+      persistToSupabase(next);
       return next;
     });
-  }, [persistImmediately]);
+  }, [persistToSupabase]);
 
   // Update active exam index with persistence
   const handleSelectExam = useCallback((idx: number) => {
@@ -116,15 +136,6 @@ export default function App() {
     }
   }, []);
 
-  // Flush before window unloads
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      persistImmediately(exams);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [exams, persistImmediately]);
-
   // Live timer tick for countdown seconds
   useEffect(() => {
     const timer = setInterval(() => {
@@ -132,11 +143,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Periodic safety flush
-  useEffect(() => {
-    persistImmediately(exams);
-  }, [exams, persistImmediately]);
 
   const [theme, setTheme] = useState<ThemeType>('dark');
   useEffect(() => {
@@ -162,7 +168,6 @@ export default function App() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   
-  // Quick toggle to hide HUD and gaze directly at the Samurai on the cliff with drifting sakura
   const [samuraiFocusView, setSamuraiFocusView] = useState(false);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -200,7 +205,7 @@ export default function App() {
   const handleResetToDefaults = () => {
     const defaults = getInitialExams();
     setExams(defaults);
-    persistImmediately(defaults);
+    persistToSupabase(defaults);
     handleSelectExam(0);
     showToast('Reset to curated syllabus successfully.');
   };
@@ -217,14 +222,14 @@ export default function App() {
       chapters: [],
     }));
     setExams(blank);
-    persistImmediately(blank);
+    persistToSupabase(blank);
     handleSelectExam(0);
     showToast('Cleared all 6 exam slots.');
   };
 
   const handleRestore = (imported: Exam[]) => {
     setExams(imported);
-    persistImmediately(imported);
+    persistToSupabase(imported);
     handleSelectExam(0);
     showToast('Backup restored successfully.');
   };
@@ -235,10 +240,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-slate-100 relative selection:bg-cyan-500/30 selection:text-white">
-      {/* Background with Samurai on Cliff and Floating Sakura Particle Animation */}
       <ParticleBackground config={particleConfig} />
 
-      {/* Top Navigation */}
       <Navbar
         activeExamIndex={activeIndex}
         totalExams={exams.length}
@@ -253,10 +256,8 @@ export default function App() {
         onToggleZenMode={() => setZenMode((z) => !z)}
       />
 
-      {/* Main Content Area */}
       <main className="max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 relative z-10 flex flex-col min-h-[calc(100vh-4rem)] justify-between">
         
-        {/* Quick View Controls Bar */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <button
@@ -287,11 +288,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Content Section: Hero Card positioned on left, keeping the Samurai on the right cliff completely visible! */}
         <div className="flex-1 flex flex-col justify-center">
           {!samuraiFocusView ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              {/* Left Column: Prominent Full-Screen Exam Card */}
               <div className="lg:col-span-8 xl:col-span-8 2xl:col-span-7 transition-all duration-500">
                 <HeroExamView
                   exam={activeExam}
@@ -305,9 +304,7 @@ export default function App() {
                 />
               </div>
 
-              {/* Right Column: Samurai Presence Vignette & Quick Stats */}
               <div className="hidden lg:flex lg:col-span-4 xl:col-span-4 2xl:col-span-5 flex-col items-end justify-between self-stretch pointer-events-none pr-4">
-                {/* Floating Samurai Warrior Badge */}
                 <div className="p-4 rounded-2xl bg-slate-950/50 border border-white/20 backdrop-blur-md max-w-xs text-right pointer-events-auto shadow-xl">
                   <div className="flex items-center justify-end gap-2 text-amber-300 text-xs font-mono font-bold mb-1">
                     <span>REALISTIC FLAME SAMURAI</span>
@@ -322,14 +319,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Bottom Callout hint */}
                 <div className="p-3 rounded-xl bg-slate-950/30 border border-white/10 backdrop-blur-sm pointer-events-auto text-xs text-slate-400 font-mono">
                   <span>Scroll bottom cards to change target</span>
                 </div>
               </div>
             </div>
           ) : (
-            /* Samurai Focus Mode (cards hidden so user can admire the standing samurai, moon, and drifting sakura) */
             <div className="flex flex-col items-center justify-center py-24 text-center select-none">
               <div className="p-6 rounded-2xl bg-slate-950/50 border border-white/20 backdrop-blur-md max-w-md shadow-2xl">
                 <span className="text-2xl font-serif text-white font-bold block mb-2">
@@ -350,7 +345,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Bottom Horizontal Reel of 6 Exams with Live Scroll Sync */}
         {!zenMode && (
           <BottomExamReel
             exams={exams}
@@ -363,7 +357,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Modals */}
       <EditExamModal
         exam={activeExam}
         isOpen={isEditModalOpen}
@@ -397,7 +390,6 @@ export default function App() {
         onClearAll={handleClearAll}
       />
 
-      {/* Toast Feedback */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-900/95 border border-white/20 text-white text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-cyan-400" />
