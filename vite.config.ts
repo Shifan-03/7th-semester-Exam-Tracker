@@ -12,6 +12,10 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      outDir: 'dist', // নিশ্চিত করা যে বিল্ড ফাইলগুলো 'dist' ফোল্ডারে যাচ্ছে
+      sourcemap: false,
+    },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
