@@ -19,6 +19,7 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>(getInitialExams());
   const [selectedPdfChapter, setSelectedPdfChapter] = useState<{ examIndex: number; chapterIndex: number } | null>(null);
 
+  // Supabase থেকে লেটেস্ট ডেটা সিঙ্ক ও ফেচ করা
   const fetchFromSupabase = useCallback(async () => {
     try {
       const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
@@ -43,15 +44,18 @@ export default function App() {
               }))
             : [];
           
+          const defaultExamsList = getInitialExams();
+          const defaultExam = defaultExamsList[i];
+
           return {
             id: i,
-            name: found ? found.name || '' : '',
-            subjectCode: found?.subject_code || '',
-            date: found && found.date ? found.date : '',
-            targetScore: found?.target_score || 90,
-            color: found?.color || '#38BDF8',
-            notes: found?.notes || '',
-            chapters: chs,
+            name: found && found.name ? found.name : defaultExam.name,
+            subjectCode: found && found.subject_code ? found.subject_code : defaultExam.subjectCode,
+            date: found && found.date ? found.date : defaultExam.date,
+            targetScore: found?.target_score || defaultExam.targetScore,
+            color: found?.color || defaultExam.color,
+            notes: found?.notes || defaultExam.notes,
+            chapters: chs.length > 0 ? chs : defaultExam.chapters,
           };
         });
         setExams(loadedExams);
@@ -79,6 +83,7 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
+  // Supabase-এ ডেটা পার্সিস্ট ও সিঙ্ক করার লজিক
   const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
       for (const exam of updatedExams) {
@@ -165,6 +170,7 @@ export default function App() {
     setTimeout(() => setToastMessage((prev) => (prev === msg ? null : prev)), 2500);
   }, []);
 
+  // PDF Upload Handler with Blob URL support
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -245,6 +251,25 @@ export default function App() {
     ? exams[selectedPdfChapter.examIndex]?.chapters[selectedPdfChapter.chapterIndex] 
     : null;
 
+  const getPdfBlobUrl = (base64: string) => {
+    try {
+      if (!base64) return '';
+      if (base64.startsWith('blob:')) return base64;
+      const arr = base64.split(',');
+      const mime = arr[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      return URL.createObjectURL(blob);
+    } catch {
+      return base64;
+    }
+  };
+
   return (
     <div className="min-h-screen text-slate-100 relative selection:bg-cyan-500/30 selection:text-white">
       <ParticleBackground config={particleConfig} />
@@ -282,7 +307,7 @@ export default function App() {
 
           <button
             onClick={() => setIsVisualModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-900/80 border border-white/15 text-slate-300 hover:text-white backdrop-blur-md transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-900/80 border border-white/15 text-slate-300 hover:text-white backdrop-blur-md transition-colors cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-pink-400" />
             <span>Particles & Motion</span>
@@ -307,7 +332,7 @@ export default function App() {
                 <div className="mt-4 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-cyan-400" />
-                    <span className="text-xs font-bold text-white">Exam Schedule Date:</span>
+                    <span className="text-xs font-bold text-white">Exam Schedule Date & Time:</span>
                   </div>
 
                   <div className="flex items-center gap-2 relative">
@@ -403,6 +428,7 @@ export default function App() {
         )}
       </main>
 
+      {/* Fullscreen PDF Reader Modal */}
       {selectedPdfChapter && currentPdfChapter && (
         <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-white/10">
@@ -463,7 +489,7 @@ export default function App() {
 
             {currentPdfChapter.pdfUrl ? (
               <iframe
-                src={currentPdfChapter.pdfUrl}
+                src={getPdfBlobUrl(currentPdfChapter.pdfUrl)}
                 className="w-full h-full rounded-xl border border-white/10 bg-white"
                 title={currentPdfChapter.title}
               />
