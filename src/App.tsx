@@ -19,7 +19,7 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>(getInitialExams());
   const [selectedPdfChapter, setSelectedPdfChapter] = useState<{ examIndex: number; chapterIndex: number } | null>(null);
 
-  // Supabase থেকে ফেচ করা
+  // Supabase থেকে ডাটা ফেচ করা
   const fetchFromSupabase = useCallback(async () => {
     try {
       const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
@@ -80,7 +80,7 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // Supabase-এ সেভ করার লজিক
+  // Supabase-এ ডেটা সিঙ্ক ও সেভ করার লজিক
   const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
       for (const exam of updatedExams) {
@@ -167,8 +167,8 @@ export default function App() {
     setTimeout(() => setToastMessage((prev) => (prev === msg ? null : prev)), 2500);
   }, []);
 
-  // PDF Upload Handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterIdx: number) => {
+  // PDF Upload Handler for specific chapter
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterIndexStr: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -183,13 +183,13 @@ export default function App() {
       setExams((prevExams) => {
         const nextExams = [...prevExams];
         const targetExam = { ...nextExams[examIdx] };
-        const targetChapters = [...targetExam.chapters];
+        const targetChapters = targetExam.chapters.map((ch) => {
+          if (ch.id === chapterIndexStr) {
+            return { ...ch, pdfUrl: base64Pdf };
+          }
+          return ch;
+        });
         
-        targetChapters[chapterIdx] = {
-          ...targetChapters[chapterIdx],
-          pdfUrl: base64Pdf,
-        };
-
         targetExam.chapters = targetChapters;
         nextExams[examIdx] = targetExam;
         persistToSupabase(nextExams);
@@ -200,7 +200,7 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts & PDF Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -220,6 +220,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeIndex, selectedPdfChapter, handleSelectExam]);
 
+  // Seamless PDF navigation across chapters and exams
   const handlePrevPdf = () => {
     if (!selectedPdfChapter) return;
     const { examIndex, chapterIndex } = selectedPdfChapter;
@@ -301,7 +302,7 @@ export default function App() {
         <div className="flex-1 flex flex-col justify-center">
           {!samuraiFocusView ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              <div className="lg:col-span-8">
+              <div className="lg:col-span-8 w-full">
                 <HeroExamView
                   exam={activeExam}
                   countdown={activeCountdown}
@@ -313,34 +314,38 @@ export default function App() {
                   onOpenEditModal={() => setIsEditModalOpen(true)}
                 />
 
-                {/* Chapter PDF Section */}
-                <div className="mt-6 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md">
+                {/* Integrated Chapter PDF Attachment Bar */}
+                <div className="mt-6 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md shadow-xl">
                   <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-cyan-400" /> Chapter PDFs & Notes
+                    <FileText className="w-4 h-4 text-cyan-400" /> Chapter PDF Notes & Reader
                   </h3>
-                  <div className="space-y-2">
+                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
                     {activeExam.chapters.length === 0 ? (
-                      <p className="text-xs text-slate-400">No chapters added yet.</p>
+                      <p className="text-xs text-slate-400 py-2 text-center">No chapters added yet. Edit exam to add chapters.</p>
                     ) : (
                       activeExam.chapters.map((ch, idx) => (
-                        <div key={ch.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-white/5">
-                          <span className="text-xs text-slate-200">{ch.title}</span>
-                          <div className="flex items-center gap-2">
-                            <label className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs text-slate-300 cursor-pointer transition-colors flex items-center gap-1">
+                        <div key={ch.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-white/10 hover:border-cyan-500/30 transition-all">
+                          <div className="flex items-center gap-2.5 overflow-hidden pr-2">
+                            <span className="text-xs font-mono text-cyan-400 font-bold">#{idx + 1}</span>
+                            <span className="text-xs text-slate-200 truncate">{ch.title}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <label className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs text-slate-300 cursor-pointer transition-colors flex items-center gap-1.5">
                               <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>{ch.pdfUrl ? 'Replace PDF' : 'Attach PDF'}</span>
+                              <span>{ch.pdfUrl ? 'Replace' : 'Upload PDF'}</span>
                               <input
                                 type="file"
                                 accept="application/pdf"
                                 className="hidden"
-                                onChange={(e) => handleFileUpload(e, activeIndex, idx)}
+                                onChange={(e) => handleFileUpload(e, activeIndex, ch.id)}
                               />
                             </label>
 
                             {ch.pdfUrl && (
                               <button
                                 onClick={() => setSelectedPdfChapter({ examIndex: activeIndex, chapterIndex: idx })}
-                                className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs text-white font-medium flex items-center gap-1 transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs text-white font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-cyan-900/40"
                               >
                                 <FileText className="w-3.5 h-3.5" /> Read PDF
                               </button>
@@ -369,7 +374,7 @@ export default function App() {
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <button
                 onClick={() => setSamuraiFocusView(false)}
-                className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold"
+                className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold cursor-pointer"
               >
                 Return to Dashboard
               </button>
@@ -389,7 +394,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Fullscreen PDF Reader Modal */}
+      {/* Fullscreen PDF Reader Modal with Side Arrows */}
       {selectedPdfChapter && currentPdfChapter && (
         <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-white/10">
@@ -405,7 +410,7 @@ export default function App() {
               <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-white/10">
                 <button
                   onClick={handlePrevPdf}
-                  className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors"
+                  className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
                   title="Previous Chapter PDF (Left Arrow)"
                 >
                   <ChevronLeft className="w-5 h-5" />
@@ -415,7 +420,7 @@ export default function App() {
                 </span>
                 <button
                   onClick={handleNextPdf}
-                  className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors"
+                  className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
                   title="Next Chapter PDF (Right Arrow)"
                 >
                   <ChevronRight className="w-5 h-5" />
@@ -424,7 +429,7 @@ export default function App() {
 
               <button
                 onClick={() => setSelectedPdfChapter(null)}
-                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -434,14 +439,16 @@ export default function App() {
           <div className="flex-1 relative bg-slate-900/50 p-2 sm:p-4">
             <button
               onClick={handlePrevPdf}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-slate-900/80 border border-white/20 text-white hover:bg-cyan-600 transition-all shadow-2xl backdrop-blur-md"
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-slate-900/80 border border-white/20 text-white hover:bg-cyan-600 transition-all shadow-2xl backdrop-blur-md cursor-pointer"
+              title="Previous PDF"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
 
             <button
               onClick={handleNextPdf}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-slate-900/80 border border-white/20 text-white hover:bg-cyan-600 transition-all shadow-2xl backdrop-blur-md"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-slate-900/80 border border-white/20 text-white hover:bg-cyan-600 transition-all shadow-2xl backdrop-blur-md cursor-pointer"
+              title="Next PDF"
             >
               <ChevronRight className="w-6 h-6" />
             </button>
