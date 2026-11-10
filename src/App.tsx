@@ -19,7 +19,6 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>(getInitialExams());
   const [selectedPdfChapter, setSelectedPdfChapter] = useState<{ examIndex: number; chapterIndex: number } | null>(null);
 
-  // Supabase থেকে ডাটা ফেচ
   const fetchFromSupabase = useCallback(async () => {
     try {
       const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
@@ -80,7 +79,6 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // Supabase-এ সিঙ্ক ও সেভ লজিক
   const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
       for (const exam of updatedExams) {
@@ -167,7 +165,6 @@ export default function App() {
     setTimeout(() => setToastMessage((prev) => (prev === msg ? null : prev)), 2500);
   }, []);
 
-  // PDF Upload Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -195,7 +192,6 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // Keyboard Navigation & Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -308,7 +304,6 @@ export default function App() {
                   onOpenEditModal={() => setIsEditModalOpen(true)}
                 />
 
-                {/* Quick Date Select & Calendar Bar */}
                 <div className="mt-4 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-cyan-400" />
@@ -329,7 +324,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Chapter PDFs List */}
                 <div className="mt-4 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md shadow-xl">
                   <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
                     <FileText className="w-4 h-4 text-cyan-400" /> Chapter PDFs & Notes
@@ -409,7 +403,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Fullscreen PDF Reader Modal with Arrow Navigation */}
       {selectedPdfChapter && currentPdfChapter && (
         <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-white/10">
@@ -484,11 +477,17 @@ export default function App() {
         </div>
       )}
 
-      {/* Modals */}
       <EditExamModal exam={activeExam} isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleUpdateExam} />
       <VisualSettingsModal isOpen={isVisualModalOpen} config={particleConfig} onClose={() => setIsVisualModalOpen(false)} onUpdateConfig={(p) => setParticleConfig((prev) => ({ ...prev, ...p }))} />
       <BackupModal isOpen={isBackupModalOpen} exams={exams} onClose={() => setIsBackupModalOpen(false)} onRestore={(imp) => { setExams(imp); persistToSupabase(imp); }} />
       <ResetModal isOpen={isResetModalOpen} onClose={() => setIsResetModalOpen(false)} onResetToDefaults={() => setExams(getInitialExams())} onClearAll={() => setExams([])} />
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-900/95 border border-white/20 text-white text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-cyan-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+    </div>
+  );
+}
