@@ -10,7 +10,7 @@ import { ResetModal } from './components/ResetModal';
 import { Exam, ParticleConfig, ThemeType } from './types';
 import { getInitialExams } from './data/defaultExams';
 import { calculateCountdown, calculateProgress } from './utils/examCalculations';
-import { Eye, EyeOff, Sparkles, FileText, ChevronLeft, ChevronRight, X, Upload } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, FileText, ChevronLeft, ChevronRight, X, Upload, Calendar } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const ACTIVE_INDEX_KEY = 'examTracker.activeIndex';
@@ -19,7 +19,7 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>(getInitialExams());
   const [selectedPdfChapter, setSelectedPdfChapter] = useState<{ examIndex: number; chapterIndex: number } | null>(null);
 
-  // Supabase থেকে ডাটা ফেচ করা
+  // Supabase থেকে ডাটা ফেচ
   const fetchFromSupabase = useCallback(async () => {
     try {
       const { data: dbExams, error: errExams } = await supabase.from('exams').select('*');
@@ -80,7 +80,7 @@ export default function App() {
   const [lastSaved, setLastSaved] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
-  // Supabase-এ ডেটা সিঙ্ক ও সেভ করার লজিক
+  // Supabase-এ সিঙ্ক ও সেভ লজিক
   const persistToSupabase = useCallback(async (updatedExams: Exam[]) => {
     try {
       for (const exam of updatedExams) {
@@ -167,8 +167,8 @@ export default function App() {
     setTimeout(() => setToastMessage((prev) => (prev === msg ? null : prev)), 2500);
   }, []);
 
-  // PDF Upload Handler for specific chapter
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterIndexStr: string) => {
+  // PDF Upload Handler
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, examIdx: number, chapterId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -183,14 +183,9 @@ export default function App() {
       setExams((prevExams) => {
         const nextExams = [...prevExams];
         const targetExam = { ...nextExams[examIdx] };
-        const targetChapters = targetExam.chapters.map((ch) => {
-          if (ch.id === chapterIndexStr) {
-            return { ...ch, pdfUrl: base64Pdf };
-          }
-          return ch;
-        });
-        
-        targetExam.chapters = targetChapters;
+        targetExam.chapters = targetExam.chapters.map((ch) => 
+          ch.id === chapterId ? { ...ch, pdfUrl: base64Pdf } : ch
+        );
         nextExams[examIdx] = targetExam;
         persistToSupabase(nextExams);
         return nextExams;
@@ -200,7 +195,7 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // Keyboard Shortcuts & PDF Navigation
+  // Keyboard Navigation & Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -220,7 +215,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeIndex, selectedPdfChapter, handleSelectExam]);
 
-  // Seamless PDF navigation across chapters and exams
   const handlePrevPdf = () => {
     if (!selectedPdfChapter) return;
     const { examIndex, chapterIndex } = selectedPdfChapter;
@@ -314,14 +308,35 @@ export default function App() {
                   onOpenEditModal={() => setIsEditModalOpen(true)}
                 />
 
-                {/* Integrated Chapter PDF Attachment Bar */}
-                <div className="mt-6 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md shadow-xl">
+                {/* Quick Date Select & Calendar Bar */}
+                <div className="mt-4 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-bold text-white">Exam Schedule Date:</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 relative">
+                    <input
+                      type="datetime-local"
+                      value={activeExam.date || ''}
+                      onChange={(e) => {
+                        const newDate = e.target.value;
+                        const updated = { ...activeExam, date: newDate };
+                        handleUpdateExam(updated);
+                      }}
+                      className="bg-slate-950 border border-white/20 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Chapter PDFs List */}
+                <div className="mt-4 p-4 rounded-2xl bg-slate-900/80 border border-white/10 backdrop-blur-md shadow-xl">
                   <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-cyan-400" /> Chapter PDF Notes & Reader
+                    <FileText className="w-4 h-4 text-cyan-400" /> Chapter PDFs & Notes
                   </h3>
-                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                     {activeExam.chapters.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-2 text-center">No chapters added yet. Edit exam to add chapters.</p>
+                      <p className="text-xs text-slate-400 py-2 text-center">No chapters added yet.</p>
                     ) : (
                       activeExam.chapters.map((ch, idx) => (
                         <div key={ch.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-white/10 hover:border-cyan-500/30 transition-all">
@@ -333,7 +348,7 @@ export default function App() {
                           <div className="flex items-center gap-2 shrink-0">
                             <label className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-xs text-slate-300 cursor-pointer transition-colors flex items-center gap-1.5">
                               <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>{ch.pdfUrl ? 'Replace' : 'Upload PDF'}</span>
+                              <span>{ch.pdfUrl ? 'Replace PDF' : 'Attach PDF'}</span>
                               <input
                                 type="file"
                                 accept="application/pdf"
@@ -345,7 +360,7 @@ export default function App() {
                             {ch.pdfUrl && (
                               <button
                                 onClick={() => setSelectedPdfChapter({ examIndex: activeIndex, chapterIndex: idx })}
-                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs text-white font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-cyan-900/40"
+                                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs text-white font-medium flex items-center gap-1.5 transition-colors shadow-lg shadow-cyan-900/40 cursor-pointer"
                               >
                                 <FileText className="w-3.5 h-3.5" /> Read PDF
                               </button>
@@ -394,7 +409,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Fullscreen PDF Reader Modal with Side Arrows */}
+      {/* Fullscreen PDF Reader Modal with Arrow Navigation */}
       {selectedPdfChapter && currentPdfChapter && (
         <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-white/10">
@@ -411,7 +426,7 @@ export default function App() {
                 <button
                   onClick={handlePrevPdf}
                   className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
-                  title="Previous Chapter PDF (Left Arrow)"
+                  title="Previous Chapter PDF"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -421,7 +436,7 @@ export default function App() {
                 <button
                   onClick={handleNextPdf}
                   className="p-1.5 hover:bg-slate-700 rounded-md text-slate-300 hover:text-white transition-colors cursor-pointer"
-                  title="Next Chapter PDF (Right Arrow)"
+                  title="Next Chapter PDF"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -476,11 +491,4 @@ export default function App() {
       <ResetModal isOpen={isResetModalOpen} onClose={() => setIsResetModalOpen(false)} onResetToDefaults={() => setExams(getInitialExams())} onClearAll={() => setExams([])} />
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-900/95 border border-white/20 text-white text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-cyan-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-    </div>
-  );
-}
+        <div className="fixed bottom-6 left-1/
